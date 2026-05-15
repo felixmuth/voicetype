@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Visual-Companion-Brainstorming (lokale Artefakte)
+.superpowers/
+
+# Git-Worktrees (isolierte Arbeitsbereiche)
+.worktrees/
