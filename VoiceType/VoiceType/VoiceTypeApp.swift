@@ -10,7 +10,8 @@ struct VoiceTypeApp: App {
             if controller.permissionsGranted {
                 MenuContentView(
                     appState: controller.appState,
-                    onRetry: { controller.retry() })
+                    onRetry: { controller.retry() },
+                    cleanupHint: controller.cleanupHint)
             } else {
                 PermissionsView(
                     permissions: controller.permissions,
@@ -29,6 +30,7 @@ struct VoiceTypeApp: App {
 final class AppController {
     let appState = AppState()
     let permissions = Permissions()
+    let cleanupHint: String?
     var permissionsGranted = false
     private let settingsStore = SettingsStore()
     private let coordinator: DictationCoordinator
@@ -39,9 +41,26 @@ final class AppController {
         let audioCapture = AudioCapture()
         let engine = AppleSpeechEngine(
             audioCapture: audioCapture, language: settings.language)
+
+        // Cleanup-Implementierung wählen und Verfügbarkeits-Hinweis erfassen.
+        // Plan 2: Bei aktiviertem Cleanup nutzen wir FoundationModelCleanup,
+        // das intern auf Rohtext zurückfällt, wenn das Modell nicht verfügbar
+        // ist — und parallel den Hinweis liefert, den die UI anzeigt.
+        let cleanup: TextCleanup
+        let hint: String?
+        if settings.cleanupEnabled {
+            let fmCleanup = FoundationModelCleanup()
+            hint = fmCleanup.availabilityHint
+            cleanup = fmCleanup
+        } else {
+            hint = nil
+            cleanup = PassthroughCleanup()
+        }
+        cleanupHint = hint
+
         coordinator = DictationCoordinator(
             engine: engine,
-            cleanup: PassthroughCleanup(),          // Plan 1: kein Cleanup
+            cleanup: cleanup,
             delivery: TextOutput(clipboardEnabled: settings.clipboardCopy),
             focus: FocusInspector(),
             appState: appState)

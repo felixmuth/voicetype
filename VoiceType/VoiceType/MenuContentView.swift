@@ -2,10 +2,15 @@ import SwiftUI
 import VoiceTypeCore
 
 /// Inhalt des Menüleisten-Popovers: aktueller Status, letzte
-/// Transkriptionen, Beenden.
+/// Transkriptionen, Beenden — plus optional ein dezenter Hinweis, wenn
+/// das Cleanup-Modell nicht verfügbar ist.
 struct MenuContentView: View {
     let appState: AppState
     let onRetry: () -> Void
+    // `var` mit Default ist hier nötig, damit der Parameter im
+    // synthetisierten memberwise init landet — `let cleanupHint = nil`
+    // würde ihn rausnehmen. Wird de-facto nie mutiert.
+    var cleanupHint: String? = nil
 
     private var statusText: String {
         switch appState.dictationState {
@@ -32,6 +37,12 @@ struct MenuContentView: View {
 
             if isError {
                 Button("Erneut versuchen", action: onRetry)
+            }
+
+            if let cleanupHint {
+                Text(cleanupHint)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
 
             if !appState.log.isEmpty {
