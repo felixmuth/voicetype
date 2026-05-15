@@ -13,6 +13,7 @@ import AVFoundation
 public final class AudioCapture: AudioCapturing, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private var continuation: AsyncStream<CapturedAudio>.Continuation?
+    public var onLevel: (@MainActor (Float) -> Void)?
 
     public init() {}
 
@@ -31,6 +32,13 @@ public final class AudioCapture: AudioCapturing, @unchecked Sendable {
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             let level = Self.rms(of: buffer)
             self?.continuation?.yield(CapturedAudio(pcmBuffer: buffer, level: level))
+            // onLevel auf MainActor liefern — die Closure ist
+            // `@MainActor`-isoliert, also über einen Task auf den
+            // MainActor hoppen statt GCD-Mix.
+            let captured: (@MainActor (Float) -> Void)? = self?.onLevel
+            if let captured {
+                Task { @MainActor in captured(level) }
+            }
         }
 
         engine.prepare()

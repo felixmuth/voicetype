@@ -30,9 +30,13 @@ public protocol FocusInspecting: Sendable {
 }
 
 /// Mikrofon-Aufnahme als Puffer-Stream.
-public protocol AudioCapturing: Sendable {
+public protocol AudioCapturing: AnyObject, Sendable {
     func startStream() throws -> AsyncStream<CapturedAudio>
     func stop()
+    /// Optionaler Callback, der bei jedem Audio-Buffer mit dem aktuellen
+    /// RMS-Pegel (0…1) aufgerufen wird. Closure ist `@MainActor`-isoliert
+    /// — Implementierer müssen vor dem Aufruf auf den MainActor hoppen.
+    var onLevel: (@MainActor (Float) -> Void)? { get set }
 }
 
 /// Roh-Audiopuffer plus aktueller Pegel (RMS, 0…1) für den Visualizer.

@@ -85,6 +85,9 @@ public final class DictationCoordinator {
 
     /// Wird aufgerufen, wenn der Engine-Stream regulär geendet hat.
     private func finishAfterStream() async {
+        // Audio ist gestoppt — Pegel zurücksetzen, sonst zeigt das
+        // Wellenform-Icon/Overlay den letzten Wert bis zum nächsten Diktat.
+        appState.micLevel = 0
         // Bei zu kurzem Tastendruck: alles verwerfen.
         if discardCurrent {
             appState.livePreview = ""
@@ -108,5 +111,13 @@ public final class DictationCoordinator {
 
         appState.livePreview = ""
         appState.dictationState = .idle
+    }
+
+    /// Mikrofonpegel-Update. Wird vom `onLevel`-Callback der
+    /// `AudioCapturing`-Implementierung über den `AppController`
+    /// hier durchgereicht — so bleibt die Invariante „nur der
+    /// Coordinator mutiert AppState" gewahrt.
+    @MainActor public func updateMicLevel(_ level: Float) {
+        appState.micLevel = level
     }
 }

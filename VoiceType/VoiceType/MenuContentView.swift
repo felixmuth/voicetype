@@ -1,9 +1,9 @@
 import SwiftUI
 import VoiceTypeCore
 
-/// Inhalt des Menüleisten-Popovers: aktueller Status, letzte
-/// Transkriptionen, Beenden — plus optional ein dezenter Hinweis, wenn
-/// das Cleanup-Modell nicht verfügbar ist.
+/// Inhalt des Menüleisten-Popovers (schlank): aktueller Status, optional
+/// der Cleanup-Hinweis, „Erneut versuchen" im Fehlerfall, „Fenster
+/// öffnen…" und „Beenden". Verlauf-Liste lebt jetzt im Hauptfenster.
 struct MenuContentView: View {
     let appState: AppState
     let onRetry: () -> Void
@@ -11,6 +11,8 @@ struct MenuContentView: View {
     // synthetisierten memberwise init landet — `let cleanupHint = nil`
     // würde ihn rausnehmen. Wird de-facto nie mutiert.
     var cleanupHint: String? = nil
+
+    @Environment(\.openWindow) private var openWindow
 
     private var statusText: String {
         switch appState.dictationState {
@@ -35,27 +37,23 @@ struct MenuContentView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            if isError {
-                Button("Erneut versuchen", action: onRetry)
-            }
-
             if let cleanupHint {
                 Text(cleanupHint)
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
 
-            if !appState.log.isEmpty {
-                Divider()
-                Text("Zuletzt").font(.caption).foregroundStyle(.tertiary)
-                ForEach(appState.log.prefix(3)) { entry in
-                    Text(entry.text)
-                        .font(.callout)
-                        .lineLimit(2)
-                }
+            if isError {
+                Button("Erneut versuchen", action: onRetry)
             }
 
             Divider()
+
+            Button("Fenster öffnen…") {
+                openWindow(id: "main")
+                NSApp.activate()
+            }
+
             Button("Beenden") { NSApplication.shared.terminate(nil) }
         }
         .padding(12)

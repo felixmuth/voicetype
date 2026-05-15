@@ -132,4 +132,12 @@ import Foundation
         }
         #expect(delivery.deliverCallCount == 0)
     }
+
+    @Test func updateMicLevelWritesToAppState() {
+        let (coordinator, appState, _, _, _, _) = makeCoordinator()
+        coordinator.updateMicLevel(0.42)
+        #expect(appState.micLevel == 0.42)
+        coordinator.updateMicLevel(0)
+        #expect(appState.micLevel == 0)
+    }
 }
