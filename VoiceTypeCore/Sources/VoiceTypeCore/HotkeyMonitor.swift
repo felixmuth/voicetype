@@ -7,12 +7,20 @@ import AppKit
 /// Benötigt die Berechtigung „Bedienungshilfen" (Accessibility).
 @MainActor
 public final class HotkeyMonitor {
+    /// Mindest-Haltedauer, bevor wir `onPress` feuern. Kürzere Tipper
+    /// (versehentlich, Doppeltipper, etc.) gehen gar nicht erst in die
+    /// Aufnahme-Pipeline — kein Pop-Up, kein engine.start/stop-Zyklus,
+    /// keine Möglichkeit für Apple-XPC-Hänger durch schnelle Sequenzen.
+    public static let pressDebounce: Duration = .milliseconds(150)
+
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var captureGlobalMonitor: Any?
     private var captureLocalMonitor: Any?
     private var isStarted = false
     private var pressedAt: ContinuousClock.Instant?
+    private var pendingPressTask: Task<Void, Never>?
+    private var pressFired = false
     private let clock = ContinuousClock()
     private var hotkey: String
 
@@ -64,6 +72,9 @@ public final class HotkeyMonitor {
     public func setHotkey(_ hotkey: String) {
         self.hotkey = hotkey.lowercased()
         pressedAt = nil
+        pendingPressTask?.cancel()
+        pendingPressTask = nil
+        pressFired = false
     }
 
     public func start() {
@@ -86,6 +97,9 @@ public final class HotkeyMonitor {
         localMonitor = nil
         isStarted = false
         pressedAt = nil
+        pendingPressTask?.cancel()
+        pendingPressTask = nil
+        pressFired = false
     }
 
     private func handle(_ event: NSEvent) {
@@ -107,11 +121,28 @@ public final class HotkeyMonitor {
     private func updateState(isDown: Bool) {
         if isDown, pressedAt == nil {
             pressedAt = clock.now
-            onPress?()
+            pressFired = false
+            pendingPressTask?.cancel()
+            pendingPressTask = Task { [weak self] in
+                try? await Task.sleep(for: Self.pressDebounce)
+                guard let self, !Task.isCancelled else { return }
+                // Nur feuern, wenn fn nach dem Debounce noch gedrückt ist.
+                guard self.pressedAt != nil else { return }
+                self.pressFired = true
+                self.onPress?()
+            }
         } else if !isDown, let start = pressedAt {
             let held = clock.now - start
             pressedAt = nil
-            onRelease?(held)
+            pendingPressTask?.cancel()
+            pendingPressTask = nil
+            // Nur release feuern, wenn der debounced press tatsächlich
+            // schon hochgegangen ist — sonst war's ein Tipper unterhalb
+            // des Schwellwerts und wir ignorieren das Event ganz.
+            if pressFired {
+                onRelease?(held)
+            }
+            pressFired = false
         }
     }
 

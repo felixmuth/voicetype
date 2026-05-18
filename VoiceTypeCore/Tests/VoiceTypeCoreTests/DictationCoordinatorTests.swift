@@ -30,6 +30,31 @@ import Foundation
         }
     }
 
+    @Test func multipleFinalSegmentsAreConcatenatedNotOverwritten() async {
+        // Apple SpeechTranscriber emittiert pro Utterance ein isFinal-
+        // Update — bei einer längeren Pause während des Recordings
+        // kommen also mehrere finale Segmente. Der Coordinator muss
+        // sie zum vollständigen Diktat zusammensetzen.
+        let (coordinator, appState, engine, _, delivery, _) = makeCoordinator()
+        appState.dictationState = .idle
+
+        coordinator.startDictation()
+        await waitUntilState(appState, leaves: .idle)
+        engine.emit("erster teil", isFinal: true)
+        try? await Task.sleep(for: .milliseconds(20))
+        engine.emit("zweiter teil", isFinal: true)
+        try? await Task.sleep(for: .milliseconds(20))
+
+        coordinator.endDictation(heldFor: .seconds(3))
+        engine.finishStream()
+        await waitUntilState(appState, leaves: .recording)
+        await waitUntilState(appState, leaves: .finalizing)
+        await waitUntilState(appState, leaves: .cleaning)
+        await waitUntilState(appState, leaves: .delivering)
+
+        #expect(delivery.deliveredText == "erster teil zweiter teil")
+    }
+
     @Test func startMovesToRecordingAndStreamsLivePreview() async {
         let (coordinator, appState, engine, _, _, _) = makeCoordinator()
         appState.dictationState = .idle
@@ -133,11 +158,22 @@ import Foundation
         #expect(delivery.deliverCallCount == 0)
     }
 
-    @Test func updateMicLevelWritesToAppState() {
+    @Test func updateMicLevelWritesRawLevelAndDrivesSpeechFlag() {
+        // Coordinator setzt den rohen Pegel direkt in micLevel und
+        // leitet daraus den binären isSpeaking-Flag ab (Threshold 0.03,
+        // Release-Delay 180 ms).
         let (coordinator, appState, _, _, _, _) = makeCoordinator()
-        coordinator.updateMicLevel(0.42)
-        #expect(appState.micLevel == 0.42)
-        coordinator.updateMicLevel(0)
-        #expect(appState.micLevel == 0)
+        // Unter Threshold → kein Speaking
+        coordinator.updateMicLevel(0.01)
+        #expect(appState.micLevel == 0.01)
+        #expect(appState.isSpeaking == false)
+        // Über Threshold → Speaking sofort an
+        coordinator.updateMicLevel(0.2)
+        #expect(appState.micLevel == 0.2)
+        #expect(appState.isSpeaking == true)
+        // Direkt darauf wieder unter Threshold: Hold-Timer hält Speaking
+        // noch aktiv (< 180 ms vergangen).
+        coordinator.updateMicLevel(0.0)
+        #expect(appState.isSpeaking == true)
     }
 }

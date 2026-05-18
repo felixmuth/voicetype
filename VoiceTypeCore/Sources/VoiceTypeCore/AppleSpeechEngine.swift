@@ -8,7 +8,14 @@ public actor AppleSpeechEngine: TranscriptionEngine {
     private let audioCapture: AudioCapturing
     private let language: String          // "auto" | "de" | "en"
 
-    private var transcriber: SpeechTranscriber?
+    /// Hartes Lifecycle-Pärchen: SpeechTranscriber und SpeechAnalyzer
+    /// werden für **jedes** Diktat frisch instanziiert. Wir können einen
+    /// `SpeechTranscriber` nicht über zwei `SpeechAnalyzer`-Instanzen
+    /// hinweg teilen — Apple's interner `setWorkers(...)`-Pfad triggert
+    /// dann einen Breakpoint-Trap (siehe `MenuBarLabel`-Bugfix-Commit
+    /// für den zugehörigen Crash-Report). `prepare()` validiert nur
+    /// Locale-Verfügbarkeit + Asset-Install.
+    private var localeReady = false
     private var analyzer: SpeechAnalyzer?
     private var inputBuilder: AsyncStream<AnalyzerInput>.Continuation?
     private let converter = BufferConverter()
@@ -26,14 +33,11 @@ public actor AppleSpeechEngine: TranscriptionEngine {
         }
     }
 
+    /// Validiert die Locale und installiert das Asset, falls nötig.
+    /// Erstellt keine wiederverwendbaren Engine-Instanzen — die werden
+    /// in `start()` pro Diktat frisch aufgesetzt.
     public func prepare() async throws {
         let locale = resolveLocale()
-        let transcriber = SpeechTranscriber(
-            locale: locale,
-            transcriptionOptions: [],
-            reportingOptions: [.volatileResults],
-            attributeOptions: []
-        )
 
         let supported = await SpeechTranscriber.supportedLocales
             .map { $0.identifier(.bcp47) }
@@ -44,17 +48,32 @@ public actor AppleSpeechEngine: TranscriptionEngine {
         let installed = await SpeechTranscriber.installedLocales
             .map { $0.identifier(.bcp47) }
         if !installed.contains(locale.identifier(.bcp47)) {
+            // Asset-Install benötigt ein Probe-Transcriber-Exemplar.
+            // Wir verwerfen es nach dem Download — `start()` baut einen
+            // frischen.
+            let probe = SpeechTranscriber(
+                locale: locale,
+                preset: .progressiveTranscription)
             if let request = try await AssetInventory
-                .assetInstallationRequest(supporting: [transcriber]) {
+                .assetInstallationRequest(supporting: [probe]) {
                 try await request.downloadAndInstall()
             }
         }
 
-        self.transcriber = transcriber
+        localeReady = true
     }
 
     public func start() async throws -> AsyncThrowingStream<TranscriptionUpdate, Error> {
-        guard let transcriber else { throw TranscriptionError.notPrepared }
+        guard localeReady else { throw TranscriptionError.notPrepared }
+        let locale = resolveLocale()
+        // `.progressiveTranscription`-Preset emittiert Apple-seitig
+        // partial Results live während der Aufnahme. Der default
+        // `.transcription`-Preset batched alle Updates erst beim
+        // `analyzer.finalize()` (verifiziert über headless Smoke +
+        // Body-Render-Timestamps).
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            preset: .progressiveTranscription)
 
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         guard let analyzerFormat = await SpeechAnalyzer
@@ -63,7 +82,11 @@ public actor AppleSpeechEngine: TranscriptionEngine {
             // sofort scheitern statt still alle Buffer zu verwerfen.
             throw TranscriptionError.modelUnavailable
         }
-        let (inputSequence, inputBuilder) = AsyncStream<AnalyzerInput>.makeStream()
+        // Backpressure: SpeechAnalyzer ist langsamer als die Audio-Tap-Rate.
+        // Ohne Limit würde die Queue zwischen Audio-Stream und Analyzer
+        // unbegrenzt wachsen (Symptom: RAM-Anstieg, MainActor-Stau).
+        let (inputSequence, inputBuilder) = AsyncStream<AnalyzerInput>.makeStream(
+            bufferingPolicy: .bufferingNewest(16))
         self.analyzer = analyzer
         self.inputBuilder = inputBuilder
 
@@ -107,7 +130,19 @@ public actor AppleSpeechEngine: TranscriptionEngine {
         audioCapture.stop()
         inputBuilder?.finish()
         inputBuilder = nil
-        try? await analyzer?.finalizeAndFinishThroughEndOfInput()
+        if let analyzer {
+            // Apple's `finalizeAndFinishThroughEndOfInput` kann in seltenen
+            // Fällen hängen (z. B. wenn der Audio-Render-Thread noch eine
+            // Buffer-Drain durchführt). Mit 2 s Timeout brechen wir ab,
+            // damit der DictationCoordinator nicht für immer in .finalizing
+            // sitzt und der nächste Hotkey-Press das Diktat blockiert.
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { try? await analyzer.finalizeAndFinishThroughEndOfInput() }
+                group.addTask { try? await Task.sleep(for: .seconds(2)) }
+                _ = await group.next()
+                group.cancelAll()
+            }
+        }
         analyzer = nil
     }
 }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		5E58EF692FB6968100C7C724 /* VoiceTypeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5E58EF682FB6968100C7C724 /* VoiceTypeCore */; };
+		5E58EFA02FB6968100C7C724 /* VoiceTypeWhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5E58EFA12FB6968100C7C724 /* VoiceTypeWhisperKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5E58EF692FB6968100C7C724 /* VoiceTypeCore in Frameworks */,
+				5E58EFA02FB6968100C7C724 /* VoiceTypeWhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +73,7 @@
 			name = VoiceType;
 			packageProductDependencies = (
 				5E58EF682FB6968100C7C724 /* VoiceTypeCore */,
+				5E58EFA12FB6968100C7C724 /* VoiceTypeWhisperKit */,
 			);
 			productName = VoiceType;
 			productReference = 5E58EF532FB6953C00C7C724 /* VoiceType.app */;
@@ -102,6 +105,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5E58EF672FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeCore" */,
+				5E58EFA22FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeWhisperKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5E58EF542FB6953C00C7C724 /* Products */;
@@ -344,12 +348,20 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../VoiceTypeCore;
 		};
+		5E58EFA22FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeWhisperKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../VoiceTypeWhisperKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		5E58EF682FB6968100C7C724 /* VoiceTypeCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VoiceTypeCore;
+		};
+		5E58EFA12FB6968100C7C724 /* VoiceTypeWhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VoiceTypeWhisperKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

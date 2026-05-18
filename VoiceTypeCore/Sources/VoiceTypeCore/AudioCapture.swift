@@ -14,6 +14,7 @@ public final class AudioCapture: AudioCapturing, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private var continuation: AsyncStream<CapturedAudio>.Continuation?
     public var onLevel: (@MainActor (Float) -> Void)?
+    private var levelTickCounter: Int = 0
 
     public init() {}
 
@@ -26,17 +27,29 @@ public final class AudioCapture: AudioCapturing, @unchecked Sendable {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
 
-        let (stream, continuation) = AsyncStream<CapturedAudio>.makeStream()
+        // Backpressure: wenn der Consumer (AppleSpeechEngine) hinterherhängt,
+        // alten Audio-Buffer droppen statt unendlich queuen. Sonst frisst der
+        // Stream RAM ohne Limit und der MainActor erstickt.
+        let (stream, continuation) = AsyncStream<CapturedAudio>.makeStream(
+            bufferingPolicy: .bufferingNewest(16))
         self.continuation = continuation
+        levelTickCounter = 0
 
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            guard let self else { return }
             let level = Self.rms(of: buffer)
-            self?.continuation?.yield(CapturedAudio(pcmBuffer: buffer, level: level))
-            // onLevel auf MainActor liefern — die Closure ist
-            // `@MainActor`-isoliert, also über einen Task auf den
-            // MainActor hoppen statt GCD-Mix.
-            let captured: (@MainActor (Float) -> Void)? = self?.onLevel
-            if let captured {
+            self.continuation?.yield(CapturedAudio(pcmBuffer: buffer, level: level))
+            // onLevel-Throttling: nur jeder 4. Buffer (~25 Hz bei 1024
+            // Samples / 44.1 kHz) löst den MainActor-Hop aus. Vorher
+            // produzierte jeder Buffer einen `Task { @MainActor }`, was
+            // bei blockiertem MainActor zu Task-Stau, RAM-Wachstum und
+            // 100 %-CPU-Loop führte.
+            // Throttling auf jeden 2. Buffer (~22 Hz Update-Rate bei
+            // 1024 Samples / 44.1 kHz) — feiner Kompromiss zwischen
+            // Wellenform-Reaktivität und MainActor-Last.
+            self.levelTickCounter &+= 1
+            guard self.levelTickCounter % 2 == 0 else { return }
+            if let captured = self.onLevel {
                 Task { @MainActor in captured(level) }
             }
         }

@@ -11,7 +11,28 @@ public final class AppState {
     // Plan-3-Gerüst: wird mit dem animierten Wellenform-Icon verdrahtet
     // (AudioCapturing → Coordinator → AppState). In Plan 1 noch ungenutzt.
     public internal(set) var micLevel: Float = 0
+    /// Voice-Activity-Detection-Status. Wird vom `DictationCoordinator`
+    /// per Threshold + Release-Delay aus dem rohen Mikrofon-Pegel
+    /// abgeleitet; die UI (Wellenform, Pulse) reagiert binär — entweder
+    /// gleichmäßig animiert während Sprache, oder ruhig.
+    public internal(set) var isSpeaking: Bool = false
     public private(set) var log: [TranscriptEntry] = []
+
+    /// Wird vom AppController gesetzt, wenn die gewünschte Engine nicht
+    /// verfügbar ist (Modell fehlt, prepare() schlug fehl, etc.) — die
+    /// App läuft dann mit dem Fallback (typischerweise Apple Speech).
+    /// `nil` bedeutet: gewählte Engine läuft.
+    public var engineFallbackHint: String?
+
+    /// Spiegelt die *tatsächlich laufende* Engine — wird vom
+    /// AppController nach jedem erfolgreichen Swap aktualisiert. Die UI
+    /// vergleicht den Wert mit `settings.transcriptionEngine`, um den
+    /// Aktivierungs-Footer zu rendern (Plan 4 § 7.3).
+    public var activeTranscriptionEngine: TranscriptionEngineKind = .apple
+
+    /// Spiegelt das tatsächlich laufende Cleanup — wird vom AppController
+    /// nach jedem Swap aktualisiert.
+    public var activeCleanupEngine: CleanupEngineKind = .appleFoundationModels
 
     public init() {}
 

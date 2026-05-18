@@ -19,7 +19,7 @@ import Foundation
         let store = SettingsStore(fileURL: url)
         var settings = Settings()
         settings.language = "de"
-        settings.cleanupEnabled = false
+        settings.cleanupEngine = .off
         try store.save(settings)
         #expect(store.load() == settings)
     }

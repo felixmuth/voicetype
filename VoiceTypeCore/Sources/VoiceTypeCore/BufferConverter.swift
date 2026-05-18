@@ -2,12 +2,16 @@ import AVFoundation
 
 /// Wandelt AVAudioPCMBuffer in ein Zielformat um (z. B. das von
 /// SpeechAnalyzer geforderte). Hält einen AVAudioConverter pro Formatpaar.
-final class BufferConverter {
+/// `public`, damit andere VoiceType-Packages (WhisperKit-Adapter) den
+/// Helfer wiederverwenden können, ohne ihn zu duplizieren.
+public final class BufferConverter {
     private var converter: AVAudioConverter?
     private var lastInputFormat: AVAudioFormat?
     private var lastOutputFormat: AVAudioFormat?
 
-    func convert(_ buffer: AVAudioPCMBuffer, to outputFormat: AVAudioFormat) throws -> AVAudioPCMBuffer {
+    public init() {}
+
+    public func convert(_ buffer: AVAudioPCMBuffer, to outputFormat: AVAudioFormat) throws -> AVAudioPCMBuffer {
         let inputFormat = buffer.format
         if inputFormat == outputFormat { return buffer }
 
