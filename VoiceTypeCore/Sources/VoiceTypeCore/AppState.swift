@@ -7,6 +7,10 @@ import Observation
 @Observable
 public final class AppState {
     public internal(set) var dictationState: DictationState = .loading
+    /// Aktueller committed Transkripttext (= das, was die Engine bisher
+    /// als fest gilt, z. B. Parakeet's `manager.confirmedTranscript`).
+    /// Wächst monoton während einer Aufnahme, wird beim Reset
+    /// (idle / discard) auf "" gesetzt. UI rendert ihn 1:1.
     public internal(set) var livePreview: String = ""
     // Plan-3-Gerüst: wird mit dem animierten Wellenform-Icon verdrahtet
     // (AudioCapturing → Coordinator → AppState). In Plan 1 noch ungenutzt.

@@ -31,11 +31,11 @@ public actor WhisperKitEngine: TranscriptionEngine {
     private var streamer: AudioStreamTranscriber?
     private var streamTask: Task<Void, Never>?
     private var continuation: AsyncThrowingStream<TranscriptionUpdate, Error>.Continuation?
-    /// Letzter aus dem State-Callback abgeleiteter Vorschau-Text.
-    /// Beim `stop()` wird der als finales Update gefeuert, damit der
-    /// DictationCoordinator ihn als `latestFinalText` einsammelt und
-    /// an die Cleanup-/Delivery-Pipeline weiterreicht.
-    private var lastPreview: String = ""
+    /// Letzter aus dem State-Callback komponierter Stable+Draft-Stand.
+    /// Beim `stop()` wird der als finales Update gefeuert, falls der
+    /// Final-Pass leer liefert.
+    private var lastStable: String = ""
+    private var lastDraft: String = ""
 
     /// - Parameter onLevel: wird vom AudioStreamTranscriber-State-Callback
     ///   bei jedem Audio-Buffer-Update aus `bufferEnergy.last` gefeuert.
@@ -74,7 +74,8 @@ public actor WhisperKitEngine: TranscriptionEngine {
         guard let pipe = pipe, let tokenizer = pipe.tokenizer else {
             throw TranscriptionError.notPrepared
         }
-        lastPreview = ""
+        lastStable = ""
+        lastDraft = ""
 
         let lang: String? = language == "auto" ? nil : language
         // `withoutTimestamps: false` ist Pflicht — der Streamer braucht
@@ -96,7 +97,7 @@ public actor WhisperKitEngine: TranscriptionEngine {
 
         // Closure-State: hier landen die State-Updates des Streamers.
         // Wir kapseln das in einem class wrapper, damit das Closure
-        // sowohl `lastPreview` aktualisieren als auch an die
+        // sowohl `lastStable/Draft` aktualisieren als auch an die
         // `WhisperKitEngine` zurückreichen kann.
         let levelCallback = self.onLevel
         let previewSink = PreviewSink()
@@ -140,7 +141,7 @@ public actor WhisperKitEngine: TranscriptionEngine {
                 if let level = newState.bufferEnergy.last {
                     levelCallback?(level)
                 }
-                let preview = Self.compose(newState: newState)
+                let (stable, draft) = Self.composeSplit(newState: newState)
                 // Zwischen zwei Transcribe-Cycles hat der Streamer
                 // kurz alle Text-Felder geleert (currentText="",
                 // unconfirmedSegments=[], BEVOR die neuen Segmente
@@ -148,13 +149,19 @@ public actor WhisperKitEngine: TranscriptionEngine {
                 // UI auf "" zurück und der Coordinator droht beim
                 // Stop einen leeren Final-String einzusammeln.
                 // Daher: leere Zwischenstände einfach skippen.
-                guard !preview.isEmpty else { return }
-                previewSink.set(preview)
-                // Live-Update an die UI. Nicht `isFinal`, damit der
-                // Coordinator den Text in `composePreview(partial:)`
-                // routet und nicht in `appendFinalSegment(...)`.
-                continuation.yield(TranscriptionUpdate(
-                    text: preview, isFinal: false))
+                guard !stable.isEmpty || !draft.isEmpty else { return }
+                previewSink.set(stable: stable, draft: draft)
+                // UI sieht einen einzigen kombinierten Text:
+                // confirmed-Segmente + laufende Hypothese.
+                let combined: String
+                if stable.isEmpty {
+                    combined = draft
+                } else if draft.isEmpty {
+                    combined = stable
+                } else {
+                    combined = stable + " " + draft
+                }
+                continuation.yield(TranscriptionUpdate(text: combined))
             })
         self.streamer = streamer
 
@@ -239,7 +246,9 @@ public actor WhisperKitEngine: TranscriptionEngine {
 
         // Letzten Streamer-Stand als Fallback ziehen, falls
         // pipe.transcribe leer zurückkommt (z. B. Buffer zu kurz
-        // oder Whisper hat geworfen).
+        // oder Whisper hat geworfen). Wir nehmen die Konkatenation
+        // aus stable + draft, weil draft beim Final auch gültiger
+        // Text ist.
         if final.isEmpty,
            let key = streamer.map(ObjectIdentifier.init),
            let sink = previewSinks[key] {
@@ -249,7 +258,8 @@ public actor WhisperKitEngine: TranscriptionEngine {
             previewSinks.removeValue(forKey: key)
         }
 
-        continuation?.yield(TranscriptionUpdate(text: final, isFinal: true))
+        // Final-Update mit dem finalen Text.
+        continuation?.yield(TranscriptionUpdate(text: final))
         continuation?.finish()
         continuation = nil
         streamer = nil
@@ -257,44 +267,54 @@ public actor WhisperKitEngine: TranscriptionEngine {
 
     // MARK: - Helpers
 
-    /// Komponiert die Vorschau aus zwei State-Bestandteilen:
+    /// Splittet den Streamer-State in (stable, draft):
     /// - `confirmedSegments`: committed Segmente. Mit
     ///   `requiredSegmentsForConfirmation: 0` landen Segmente direkt
-    ///   hier — sie ändern sich nie mehr. Wächst monoton.
+    ///   hier — sie ändern sich nie mehr. Wächst monoton → **stable**.
     /// - `currentText`: laufende Hypothese des aktuell aktiven
     ///   Decode-Passes (Audio NACH dem letzten committed Segment).
     ///   Diese hängt am Tail und „flickert" zwar während der Inferenz,
-    ///   wird beim Abschluss aber zu einem committed Segment, das
-    ///   stehen bleibt.
+    ///   wird beim Abschluss aber zu einem committed Segment → **draft**.
     ///
     /// `unconfirmedSegments` wird bewusst ignoriert — mit
     /// `requiredSegmentsForConfirmation: 0` ist es immer leer, und
     /// selbst falls WhisperKit hier doch was reinpackt, würde es nur
     /// zwischen Cycles flickern.
-    private static func compose(newState: AudioStreamTranscriber.State) -> String {
+    private static func composeSplit(
+        newState: AudioStreamTranscriber.State
+    ) -> (stable: String, draft: String) {
         let confirmed = newState.confirmedSegments
             .map(\.text).joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         // AudioStreamTranscriber setzt `currentText` bei VAD-Stille
         // hartgecodet auf "Waiting for speech..." — wegfiltern, sonst
         // landet das in der UI und u. U. im Cleanup-/Delivery-Pfad.
-        let live = newState.currentText == "Waiting for speech..."
+        let live = (newState.currentText == "Waiting for speech...")
             ? ""
-            : newState.currentText
-        return [confirmed, live]
-            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            : newState.currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (stable: confirmed, draft: live)
     }
 
-    /// Box für den letzten Preview-String. Wird vom (nicht-isolierten)
-    /// Streamer-State-Callback geschrieben und vom `stop()`-Pfad
-    /// gelesen. `OSAllocatedUnfairLock` sorgt für threadsafe Zugriff,
-    /// ohne dass wir den ganzen Callback zum Actor hin awaiten müssen.
+    /// Box für den letzten Preview-Stand (stable+draft konkateniert).
+    /// Wird vom (nicht-isolierten) Streamer-State-Callback geschrieben
+    /// und vom `stop()`-Pfad gelesen, falls der Final-Pass leer ist.
     private final class PreviewSink: @unchecked Sendable {
         private let lock = NSLock()
-        private var value = ""
-        func set(_ s: String) { lock.lock(); value = s; lock.unlock() }
-        func get() -> String { lock.lock(); defer { lock.unlock() }; return value }
+        private var stable = ""
+        private var draft = ""
+        func set(stable: String, draft: String) {
+            lock.lock()
+            self.stable = stable
+            self.draft = draft
+            lock.unlock()
+        }
+        /// Konkatenierter Fallback: stable + " " + draft (jeweils trim).
+        func get() -> String {
+            lock.lock(); defer { lock.unlock() }
+            if stable.isEmpty { return draft }
+            if draft.isEmpty { return stable }
+            return stable + " " + draft
+        }
     }
     /// Map vom Streamer-Identity zur Preview-Sink. Erlaubt dem
     /// `stop()`-Pfad, exakt die Sink des aktuellen Streamers zu

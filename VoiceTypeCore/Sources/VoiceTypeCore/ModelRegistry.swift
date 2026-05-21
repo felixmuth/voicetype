@@ -38,7 +38,7 @@ public final class ModelRegistry {
     ) {
         self.rootFolder = rootFolder
         self.downloaders = downloaders
-        for d in ModelCatalog.whisperKitAll + ModelCatalog.mlxAll {
+        for d in ModelCatalog.whisperKitAll + ModelCatalog.mlxAll + ModelCatalog.parakeetAll {
             status[d] = .notInstalled
         }
     }
@@ -56,7 +56,7 @@ public final class ModelRegistry {
     }
 
     public func refresh() async {
-        for d in ModelCatalog.whisperKitAll + ModelCatalog.mlxAll {
+        for d in ModelCatalog.whisperKitAll + ModelCatalog.mlxAll + ModelCatalog.parakeetAll {
             status[d] = inspect(d)
         }
     }
@@ -135,15 +135,40 @@ public final class ModelRegistry {
                 .appendingPathComponent("whisperkit-coreml", isDirectory: true)
                 .appendingPathComponent(d.id, isDirectory: true)
         case .mlx:
-            // MLX-Modelle liegen in HuggingFace-Repos mit Slash-ID
-            // (z. B. `mlx-community/Qwen2.5-7B-Instruct-4bit`). Wir
-            // folgen exakt der HubApi-Konvention `<base>/models/<id>/`,
-            // sodass ein `HubApi(downloadBase: root/mlx)`-Snapshot
-            // direkt in `folder(for: d)` schreibt.
-            return rootFolder
-                .appendingPathComponent("mlx", isDirectory: true)
+            // MLXLMCommon's `defaultHubApi` schreibt in
+            // `~/Library/Caches/models/<repo>/`. Wir spiegeln genau
+            // diesen Pfad, damit der `ParakeetDownloader` (= eigentlich
+            // MLXDownloader) den HF-Snapshot direkt in `folder(for: d)`
+            // ablegt — kein Move/Copy nötig.
+            //
+            // Konsequenz: MLX-Modelle liegen im Caches-Ordner statt in
+            // Application Support (wie WhisperKit/Parakeet). Pragmatisch,
+            // weil MLXLMCommon den Pfad fest verdrahtet hat und es ohne
+            // direkten `Hub`-Import keine saubere Override-Möglichkeit
+            // gibt.
+            return FileManager.default
+                .urls(for: .cachesDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("models", isDirectory: true)
                 .appendingPathComponent(d.id, isDirectory: true)
+        case .parakeet:
+            // FluidAudio cached Parakeet-Bundles in seinem eigenen
+            // Application-Support-Folder. Wir spiegeln genau diesen
+            // Pfad, statt einen eigenen Folder zu nutzen — sonst
+            // müssten wir nach jedem Download moven/kopieren.
+            //
+            // Wichtig: FluidAudio entfernt im Cache-Pfad den
+            // `-coreml`-Suffix vom HF-Repo-Namen. Aus
+            // „FluidInference/parakeet-tdt-0.6b-v3-coreml" wird
+            // → „Models/parakeet-tdt-0.6b-v3".
+            let last = d.id.components(separatedBy: "/").last ?? d.id
+            let suffix = last.hasSuffix("-coreml")
+                ? String(last.dropLast("-coreml".count))
+                : last
+            return FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("FluidAudio", isDirectory: true)
+                .appendingPathComponent("Models", isDirectory: true)
+                .appendingPathComponent(suffix, isDirectory: true)
         }
     }
 
@@ -158,6 +183,12 @@ public final class ModelRegistry {
             required = ["AudioEncoder.mlmodelc"]
         case .mlx:
             required = ["config.json"]
+        case .parakeet:
+            // FluidAudio's Cache enthält 4 .mlmodelc-Bundles
+            // (Preprocessor, Encoder, Decoder, JointDecisionvX).
+            // Encoder als Sentinel reicht — er wird mitten im
+            // Download geschrieben, nicht zuerst.
+            required = ["Encoder.mlmodelc"]
         }
         for name in required {
             let path = folder.appendingPathComponent(name).path

@@ -22,8 +22,12 @@ import Foundation
     @Test func freshRegistryReportsNotInstalled() async {
         let registry = ModelRegistry(rootFolder: tempRoot(), downloaders: [:])
         await registry.refresh()
+        // Nur WhisperKit ist per `rootFolder` isolierbar. MLX und Parakeet
+        // liegen in fixen globalen Caches der jeweiligen Fremd-Libraries
+        // (~/Library/Caches/models bzw. FluidAudios Application Support) —
+        // ein dort bereits vorhandenes Modell würde diesen Test
+        // umgebungsabhängig machen, deshalb hier nicht geprüft.
         #expect(registry.status[ModelCatalog.whisperKitDefault] == .notInstalled)
-        #expect(registry.status[ModelCatalog.mlxDefault] == .notInstalled)
     }
 
     @Test func refreshDetectsInstalledModelOnDisk() async throws {
@@ -119,22 +123,32 @@ import Foundation
         }
     }
 
-    @Test func mlxFolderFollowsHuggingFaceConvention() {
+    @Test func mlxFolderIsInSharedHubCache() {
         let root = tempRoot()
         let registry = ModelRegistry(rootFolder: root, downloaders: [:])
         let d = ModelCatalog.mlxDefault
         let folder = registry.folder(for: d, even: true)!
-        // <root>/mlx/models/<repo-id-with-slash>/
-        #expect(folder.path.hasSuffix("/mlx/models/\(d.id)"))
+        // MLXLMCommon verdrahtet `~/Library/Caches/models/<repo>/` fest.
+        // Die Registry spiegelt genau diesen Pfad und ignoriert für
+        // MLX-Modelle daher bewusst ihren `rootFolder`.
+        let expected = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(d.id, isDirectory: true)
+        #expect(folder.path == expected.path)
+        #expect(!folder.path.hasPrefix(root.path))
     }
 
-    @Test func whisperKitFolderUsesVariantDirectly() {
+    @Test func whisperKitFolderMirrorsHubApiLayout() {
         let root = tempRoot()
         let registry = ModelRegistry(rootFolder: root, downloaders: [:])
         let d = ModelCatalog.whisperKitDefault
         let folder = registry.folder(for: d, even: true)!
-        // <root>/whisperkit/<variant>/
-        #expect(folder.path.hasSuffix("/whisperkit/\(d.id)"))
+        // WhisperKits HubApi-Downloader legt unter
+        // `<root>/whisperkit/models/argmaxinc/whisperkit-coreml/<variant>/` ab.
+        #expect(folder.path.hasPrefix(root.path))
+        #expect(folder.path.hasSuffix(
+            "/whisperkit/models/argmaxinc/whisperkit-coreml/\(d.id)"))
     }
 
     @Test func deleteRemovesInstalledModelFromDisk() async throws {

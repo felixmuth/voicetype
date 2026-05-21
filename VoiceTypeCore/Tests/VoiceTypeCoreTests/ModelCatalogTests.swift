@@ -10,10 +10,10 @@ import Testing
         #expect(def.isDefault)
     }
 
-    @Test func mlxDefaultIsQwen25SevenB() {
+    @Test func mlxDefaultIsQwen25ThreeB() {
         let def = ModelCatalog.mlxDefault
         #expect(def.kind == .mlx)
-        #expect(def.id == "mlx-community/Qwen2.5-7B-Instruct-4bit")
+        #expect(def.id == "mlx-community/Qwen2.5-3B-Instruct-4bit")
         #expect(def.isDefault)
     }
 
@@ -24,10 +24,10 @@ import Testing
     }
 
     @Test func mlxCatalogContainsKnownIds() {
+        // Katalog ist derzeit bewusst auf Qwen 2.5 3B reduziert — 7B und
+        // Llama 3.2 sind raus, Gemma 3 wegen lm_head-Mismatch deaktiviert.
         let ids = ModelCatalog.mlxAll.map(\.id)
-        #expect(ids.contains("mlx-community/Qwen2.5-7B-Instruct-4bit"))
         #expect(ids.contains("mlx-community/Qwen2.5-3B-Instruct-4bit"))
-        #expect(ids.contains("mlx-community/Llama-3.2-3B-Instruct-4bit"))
     }
 
     @Test func lookupReturnsNilForUnknownId() {

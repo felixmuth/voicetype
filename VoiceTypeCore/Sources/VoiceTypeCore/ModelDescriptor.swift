@@ -1,7 +1,7 @@
 import Foundation
 
 public struct ModelDescriptor: Hashable, Sendable {
-    public enum Kind: String, Hashable, Sendable { case whisperKit, mlx }
+    public enum Kind: String, Hashable, Sendable { case whisperKit, mlx, parakeet }
 
     public let kind: Kind
     public let id: String              // z. B. "openai_whisper-large-v3-turbo"

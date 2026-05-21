@@ -109,14 +109,47 @@ public actor AppleSpeechEngine: TranscriptionEngine {
             }
         }
 
-        // Analyzer-Ergebnisse → TranscriptionUpdate
+        // Analyzer-Ergebnisse → TranscriptionUpdate.
+        //
+        // SpeechTranscriber feuert pro Utterance ZUERST mehrere non-final
+        // Updates mit wachsendem partial-Text, DANN einen einzelnen
+        // `result.isFinal=true`-Eintrag, der die Utterance abschließt.
+        // Bei längeren Aufnahmen mit Pausen wiederholt sich dieser
+        // Zyklus mehrmals.
+        //
+        // Wir akkumulieren intern: bereits finalisierte Segmente
+        // bilden den committed Anteil; das laufende partial wird
+        // pro Update angehängt. Die UI rendert genau diesen
+        // kombinierten Text.
         return AsyncThrowingStream { continuation in
             Task {
+                var accumulated = ""   // committed seit Aufnahmebeginn
                 do {
                     for try await result in transcriber.results {
-                        continuation.yield(TranscriptionUpdate(
-                            text: String(result.text.characters),
-                            isFinal: result.isFinal))
+                        let text = String(result.text.characters)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if result.isFinal {
+                            // Segment abgeschlossen — in den Akkumulator
+                            if !text.isEmpty {
+                                accumulated = accumulated.isEmpty
+                                    ? text
+                                    : accumulated + " " + text
+                            }
+                            continuation.yield(TranscriptionUpdate(text: accumulated))
+                        } else {
+                            // Laufende Hypothese der aktuellen Utterance —
+                            // an akkumulierten Stand anhängen, damit die UI
+                            // immer den vollen aktuellen Text sieht.
+                            let combined: String
+                            if accumulated.isEmpty {
+                                combined = text
+                            } else if text.isEmpty {
+                                combined = accumulated
+                            } else {
+                                combined = accumulated + " " + text
+                            }
+                            continuation.yield(TranscriptionUpdate(text: combined))
+                        }
                     }
                     continuation.finish()
                 } catch {

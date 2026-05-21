@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		5E58EF692FB6968100C7C724 /* VoiceTypeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5E58EF682FB6968100C7C724 /* VoiceTypeCore */; };
 		5E58EFA02FB6968100C7C724 /* VoiceTypeWhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 5E58EFA12FB6968100C7C724 /* VoiceTypeWhisperKit */; };
+		5E58EFB02FB6968100C7C724 /* VoiceTypeParakeet in Frameworks */ = {isa = PBXBuildFile; productRef = 5E58EFB12FB6968100C7C724 /* VoiceTypeParakeet */; };
+		5E58EFC02FB6968100C7C724 /* VoiceTypeMLX in Frameworks */ = {isa = PBXBuildFile; productRef = 5E58EFC12FB6968100C7C724 /* VoiceTypeMLX */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +32,8 @@
 			files = (
 				5E58EF692FB6968100C7C724 /* VoiceTypeCore in Frameworks */,
 				5E58EFA02FB6968100C7C724 /* VoiceTypeWhisperKit in Frameworks */,
+				5E58EFB02FB6968100C7C724 /* VoiceTypeParakeet in Frameworks */,
+				5E58EFC02FB6968100C7C724 /* VoiceTypeMLX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +78,8 @@
 			packageProductDependencies = (
 				5E58EF682FB6968100C7C724 /* VoiceTypeCore */,
 				5E58EFA12FB6968100C7C724 /* VoiceTypeWhisperKit */,
+				5E58EFB12FB6968100C7C724 /* VoiceTypeParakeet */,
+				5E58EFC12FB6968100C7C724 /* VoiceTypeMLX */,
 			);
 			productName = VoiceType;
 			productReference = 5E58EF532FB6953C00C7C724 /* VoiceType.app */;
@@ -106,6 +112,8 @@
 			packageReferences = (
 				5E58EF672FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeCore" */,
 				5E58EFA22FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeWhisperKit" */,
+				5E58EFB22FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeParakeet" */,
+				5E58EFC22FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeMLX" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5E58EF542FB6953C00C7C724 /* Products */;
@@ -352,6 +360,14 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../VoiceTypeWhisperKit;
 		};
+		5E58EFB22FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeParakeet" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../VoiceTypeParakeet;
+		};
+		5E58EFC22FB6968100C7C724 /* XCLocalSwiftPackageReference "../VoiceTypeMLX" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../VoiceTypeMLX;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -362,6 +378,14 @@
 		5E58EFA12FB6968100C7C724 /* VoiceTypeWhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VoiceTypeWhisperKit;
+		};
+		5E58EFB12FB6968100C7C724 /* VoiceTypeParakeet */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VoiceTypeParakeet;
+		};
+		5E58EFC12FB6968100C7C724 /* VoiceTypeMLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VoiceTypeMLX;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

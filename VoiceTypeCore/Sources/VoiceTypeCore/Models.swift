@@ -10,13 +10,19 @@ public enum DictationState: Equatable, Sendable {
     case error(String)
 }
 
-/// Ein Teil- oder Endergebnis der Spracherkennung.
+/// Snapshot der Live-Transkription während einer Aufnahme.
+///
+/// Engines liefern ihren aktuellen committed Stand (z. B. Parakeet
+/// `manager.confirmedTranscript`); die UI rendert das 1:1. Es gibt
+/// keine Draft-/Volatile-Komponente mehr — der gesamte Text ist
+/// gleich behandelt.
+///
+/// Stream-Ende ist implizit (`continuation.finish()`); das letzte
+/// Update vor dem Finish trägt den finalen Text.
 public struct TranscriptionUpdate: Equatable, Sendable {
     public let text: String
-    public let isFinal: Bool
-    public init(text: String, isFinal: Bool) {
+    public init(text: String = "") {
         self.text = text
-        self.isFinal = isFinal
     }
 }
 

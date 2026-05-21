@@ -39,8 +39,31 @@ final class MockTranscriptionEngine: TranscriptionEngine, @unchecked Sendable {
     func stop() async { stopCallCount += 1 }
 
     // Test-Steuerung:
+    /// Backward-Compat-Helper: simuliert Apple-Speech-Verhalten.
+    /// `isFinal=true` schiebt das Segment in den internen
+    /// Akkumulator; `isFinal=false` hängt das partial-Wort an den
+    /// Akkumulator. Yieldet jedes Mal den kombinierten Text.
+    private var accumulatedStable = ""
     func emit(_ text: String, isFinal: Bool) {
-        deliver(.update(TranscriptionUpdate(text: text, isFinal: isFinal)))
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let combined: String
+        if isFinal {
+            if !trimmed.isEmpty {
+                accumulatedStable = accumulatedStable.isEmpty
+                    ? trimmed
+                    : accumulatedStable + " " + trimmed
+            }
+            combined = accumulatedStable
+        } else {
+            if accumulatedStable.isEmpty {
+                combined = trimmed
+            } else if trimmed.isEmpty {
+                combined = accumulatedStable
+            } else {
+                combined = accumulatedStable + " " + trimmed
+            }
+        }
+        deliver(.update(TranscriptionUpdate(text: combined)))
     }
     func finishStream() { deliver(.finish) }
     func failStream(_ error: Error) { deliver(.fail(error)) }

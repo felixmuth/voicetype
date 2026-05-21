@@ -46,6 +46,11 @@ struct SettingsView: View {
                 sectionHeader("Text aufpolieren")
                 cleanupRows
 
+                // ===== Erscheinungsbild =====
+                sectionHeader("Erscheinungsbild")
+                appearanceRow
+                livePreviewRow
+
                 // ===== Start =====
                 sectionHeader("Start")
                 loginRow
@@ -194,7 +199,8 @@ struct SettingsView: View {
                 current: controller.settings.transcriptionEngine,
                 options: [
                     (.apple,      "Apple Speech"),
-                    (.whisperKit, "WhisperKit (lokal)")
+                    (.whisperKit, "WhisperKit (lokal)"),
+                    (.parakeet,   "Parakeet (lokal)")
                 ],
                 onSelect: { handleTranscriptionPick($0) })
         }
@@ -216,6 +222,28 @@ struct SettingsView: View {
                 // ModelStatusView reicht eine ganze Zeile — wir umgeben
                 // sie mit derselben vertikalen Padding + Divider wie
                 // settingRow, damit das Layout konsistent bleibt.
+                VStack {
+                    ModelStatusView(descriptor: desc, registry: controller.registry)
+                }
+                .padding(.vertical, 14)
+                .overlay(alignment: .top) { Divider() }
+            }
+        }
+
+        if controller.settings.transcriptionEngine == .parakeet {
+            settingRow(
+                name: "Modell",
+                description: nil
+            ) {
+                AtelierMenu(
+                    current: controller.settings.parakeetModelId,
+                    options: ModelCatalog.parakeetAll.map {
+                        ($0.id, $0.displayName)
+                    },
+                    onSelect: { controller.settings.parakeetModelId = $0 })
+            }
+
+            if let desc = ModelCatalog.parakeet(id: controller.settings.parakeetModelId) {
                 VStack {
                     ModelStatusView(descriptor: desc, registry: controller.registry)
                 }
@@ -246,21 +274,66 @@ struct SettingsView: View {
         }
 
         if controller.settings.cleanupEngine == .mlx {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.warn)
-                Text("MLX-Cleanup ist in dieser Version noch nicht verfügbar — kommt in einem kommenden Update.")
-                    .font(Theme.ui(11.5))
-                    .foregroundStyle(Theme.warn)
-                Spacer(minLength: 0)
+            settingRow(
+                name: "Modell",
+                description: nil
+            ) {
+                AtelierMenu(
+                    current: controller.settings.mlxModelId,
+                    options: ModelCatalog.mlxAll.map {
+                        ($0.id, $0.displayName)
+                    },
+                    onSelect: { handleMLXModelPick($0) })
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Theme.warn.opacity(0.08)))
-            .padding(.bottom, 8)
+
+            if let desc = ModelCatalog.mlx(id: controller.settings.mlxModelId) {
+                VStack {
+                    ModelStatusView(descriptor: desc, registry: controller.registry)
+                }
+                .padding(.vertical, 14)
+                .overlay(alignment: .top) { Divider() }
+            }
+        }
+    }
+
+    /// MLX-Modellwechsel: bei nicht-installiertem Modell den Download-
+    /// Dialog zeigen statt das Setting blind anzuwenden — sonst würde
+    /// die Cleanup-Pipeline auf Passthrough fallen, ohne dass der User
+    /// versteht warum.
+    private func handleMLXModelPick(_ id: String) {
+        guard let desc = ModelCatalog.mlx(id: id) else { return }
+        askDownloadOrApply(descriptor: desc) {
+            controller.settings.mlxModelId = id
+        }
+    }
+
+    // MARK: - Erscheinungsbild
+
+    private var appearanceRow: some View {
+        settingRow(
+            name: "Theme",
+            description: "Hell, dunkel oder dem System folgen."
+        ) {
+            AtelierMenu(
+                current: controller.settings.appearance,
+                options: [
+                    (.light,  "Hell"),
+                    (.dark,   "Dunkel"),
+                    (.system, "System")
+                ],
+                onSelect: { controller.settings.appearance = $0 })
+        }
+    }
+
+    private var livePreviewRow: some View {
+        settingRow(
+            name: "Live-Vorschau",
+            description: "Aufnahme-Overlay zeigt den diktierten Text mit. Ausgeschaltet bleibt nur ein kleiner Status-Kreis übrig."
+        ) {
+            Toggle("", isOn: $controller.settings.showLivePreview)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
         }
     }
 
@@ -291,6 +364,13 @@ struct SettingsView: View {
                 controller.settings.whisperKitModelId = desc.id
                 controller.settings.transcriptionEngine = .whisperKit
             }
+        case .parakeet:
+            let desc = ModelCatalog.parakeet(id: controller.settings.parakeetModelId)
+                ?? ModelCatalog.parakeetDefault
+            askDownloadOrApply(descriptor: desc) {
+                controller.settings.parakeetModelId = desc.id
+                controller.settings.transcriptionEngine = .parakeet
+            }
         }
     }
 
@@ -299,7 +379,15 @@ struct SettingsView: View {
         case .off, .appleFoundationModels:
             controller.settings.cleanupEngine = pick
         case .mlx:
-            controller.settings.cleanupEngine = .mlx
+            // Wenn das aktuell ausgewählte MLX-Modell noch nicht da ist,
+            // den Download-Dialog zeigen — sonst würde Cleanup beim ersten
+            // Diktat stillschweigend auf Passthrough fallen.
+            let desc = ModelCatalog.mlx(id: controller.settings.mlxModelId)
+                ?? ModelCatalog.mlxDefault
+            askDownloadOrApply(descriptor: desc) {
+                controller.settings.mlxModelId = desc.id
+                controller.settings.cleanupEngine = .mlx
+            }
         }
     }
 
@@ -324,19 +412,34 @@ struct SettingsView: View {
     // MARK: - Footer (Plan 4 § 7.3)
 
     private var transcriptionFooter: String {
-        activationFooter(
+        let descriptor: ModelDescriptor?
+        switch controller.settings.transcriptionEngine {
+        case .whisperKit:
+            descriptor = ModelCatalog.whisperKit(id: controller.settings.whisperKitModelId)
+        case .parakeet:
+            descriptor = ModelCatalog.parakeet(id: controller.settings.parakeetModelId)
+        case .apple:
+            descriptor = nil
+        }
+        return activationFooter(
             setting: controller.settings.transcriptionEngine,
             active: controller.appState.activeTranscriptionEngine,
-            descriptor: controller.settings.transcriptionEngine == .whisperKit
-                ? ModelCatalog.whisperKit(id: controller.settings.whisperKitModelId)
-                : nil,
+            descriptor: descriptor,
             fallbackHint: controller.appState.engineFallbackHint)
     }
 
-    private var cleanupFooter: String {
-        activationFooter(
-            setting: controller.settings.cleanupEngine,
-            active: controller.appState.activeCleanupEngine,
+    private var cleanupFooter: String? {
+        // Sonderfall „Aus": wenn die Einstellung .off ist und auch
+        // tatsächlich .off läuft, würde der generische Footer „aktiv"
+        // sagen — was wie „Cleanup ist an" klingt. Footer dann ganz weg.
+        let setting = controller.settings.cleanupEngine
+        let active = controller.appState.activeCleanupEngine
+        if setting == .off && active == .off && controller.cleanupHint == nil {
+            return nil
+        }
+        return activationFooter(
+            setting: setting,
+            active: active,
             descriptor: nil,
             fallbackHint: controller.cleanupHint)
     }
@@ -381,7 +484,8 @@ struct SettingsView: View {
         guard let d = pendingDownload?.descriptor else { return "Modell laden?" }
         switch d.kind {
         case .whisperKit: return "WhisperKit-Modell laden?"
-        case .mlx: return "MLX-Modell laden?"
+        case .mlx:        return "MLX-Modell laden?"
+        case .parakeet:   return "Parakeet-Modell laden?"
         }
     }
 

@@ -1,6 +1,8 @@
 import Foundation
 import VoiceTypeCore
 import VoiceTypeWhisperKit
+import VoiceTypeParakeet
+import VoiceTypeMLX
 
 /// Wählt die laufende Engine + Cleanup aus den Settings + dem aktuellen
 /// Modell-Status der ModelRegistry. Pure Function — wird im AppController
@@ -43,6 +45,27 @@ enum EngineFactory {
                 modelFolder: folder,
                 language: settings.language,
                 onLevel: whisperKitOnLevel), nil)
+
+        case .parakeet:
+            guard let desc = ModelCatalog.parakeet(id: settings.parakeetModelId),
+                  let folder = registry.folder(for: desc) else {
+                return (AppleSpeechEngine(
+                    audioCapture: audioCapture, language: settings.language),
+                        "Parakeet-Modell nicht installiert — Apple Speech aktiv.")
+            }
+            // Parakeet konsumiert unseren AudioCapture-Stream und
+            // konvertiert selbst auf 16 kHz mono. Der Pegel kommt
+            // direkt aus dem AudioCapture, daher kein separater
+            // Level-Callback nötig — AudioCapture's eigener
+            // `onLevel`-Pfad wird vom Coordinator schon bedient.
+            // Version-Mapping passiert in der Engine selbst (v2 vs v3
+            // anhand des Model-ID-Suffix) — wir importieren FluidAudio
+            // hier nicht, weil dessen eigene `ModelRegistry`-Klasse
+            // mit unserer kollidieren würde.
+            return (ParakeetEngine(
+                audioCapture: audioCapture,
+                modelFolder: folder,
+                modelId: desc.id), nil)
         }
     }
 
@@ -65,11 +88,13 @@ enum EngineFactory {
             return (fm, nil)
 
         case .mlx:
-            // Plan 4 / MLX-Vertagung: MLX-Adapter ist nicht in dieser
-            // Iteration verfügbar. Passthrough mit klarem Hint, damit
-            // die UI nichts vortäuscht.
-            return (PassthroughCleanup(),
-                    "MLX-Cleanup ist in dieser Version noch nicht verfügbar.")
+            // Modell muss installiert sein, sonst Passthrough mit Hint.
+            guard let desc = ModelCatalog.mlx(id: settings.mlxModelId),
+                  let folder = registry.folder(for: desc) else {
+                return (PassthroughCleanup(),
+                        "MLX-Modell nicht installiert — Cleanup deaktiviert.")
+            }
+            return (MLXCleanup(modelFolder: folder, modelId: desc.id), nil)
         }
     }
 

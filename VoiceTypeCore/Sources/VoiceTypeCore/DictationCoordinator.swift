@@ -26,7 +26,9 @@ public final class DictationCoordinator {
     /// Watchdog-Task, der nach `processingWatchdog` einen Force-Reset
     /// auslöst, wenn das aktuelle Diktat nicht zurück nach .idle gelangt.
     private var watchdogTask: Task<Void, Never>?
-    private var latestFinalText: String = ""
+    /// Letzter Stable-Snapshot der laufenden Aufnahme. Wird beim
+    /// Stream-Ende als Roh-Transkript an Cleanup/Delivery weitergereicht.
+    private var latestStable: String = ""
     private var pasteTargetFocused = false
     private var discardCurrent = false
 
@@ -67,10 +69,10 @@ public final class DictationCoordinator {
         // mit je eigenem Zustand führt. Bewusst auf Plan 2 vertagt, wo das
         // asynchrone Foundation-Model-Cleanup das Zeitfenster relevant macht.
         guard appState.dictationState == .idle else { return }
-        latestFinalText = ""
+        latestStable = ""
         discardCurrent = false
         pasteTargetFocused = focus.isTextFieldFocused()   // Snapshot beim Drücken
-        appState.livePreview = ""
+        resetPreview()
         appState.isSpeaking = false
         lastSpeechAt = nil
         appState.dictationState = .recording
@@ -80,39 +82,18 @@ public final class DictationCoordinator {
             do {
                 let stream = try await self.engine.start()
                 for try await update in stream {
-                    if update.isFinal {
-                        self.appendFinalSegment(update.text)
-                        self.appState.livePreview = self.latestFinalText
-                    } else {
-                        self.appState.livePreview = self.composePreview(partial: update.text)
-                    }
+                    // Jeder Update ist ein vollständiger Snapshot des
+                    // bisher committed Transkripttextes. Wir reichen ihn
+                    // 1:1 an den AppState durch — die UI rendert ihn
+                    // mit Schreibanimation.
+                    self.latestStable = update.text
+                    self.appState.livePreview = update.text
                 }
                 await self.finishAfterStream()
             } catch {
                 self.appState.dictationState = .error("Transkription fehlgeschlagen")
             }
         }
-    }
-
-    /// Hängt ein neues finales Segment an `latestFinalText` an, mit
-    /// einem Leerzeichen-Trenner. Leere Segmente werden ignoriert.
-    private func appendFinalSegment(_ segment: String) {
-        let trimmed = segment.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if latestFinalText.isEmpty {
-            latestFinalText = trimmed
-        } else {
-            latestFinalText += " " + trimmed
-        }
-    }
-
-    /// Komponiert die Live-Vorschau aus bereits finalisierten Segmenten
-    /// plus laufendem partiellen Text.
-    private func composePreview(partial: String) -> String {
-        let trimmedPartial = partial.trimmingCharacters(in: .whitespacesAndNewlines)
-        if latestFinalText.isEmpty { return trimmedPartial }
-        if trimmedPartial.isEmpty { return latestFinalText }
-        return latestFinalText + " " + trimmedPartial
     }
 
     /// Hotkey losgelassen. `heldFor` ist die gemessene Haltedauer.
@@ -141,7 +122,7 @@ public final class DictationCoordinator {
             // Nur eingreifen, wenn wir tatsächlich noch hängen.
             switch self.appState.dictationState {
             case .finalizing, .cleaning, .delivering:
-                self.appState.livePreview = ""
+                self.resetPreview()
                 self.appState.micLevel = 0
                 self.streamTask = nil
                 self.appState.dictationState = .idle
@@ -160,14 +141,14 @@ public final class DictationCoordinator {
         lastSpeechAt = nil
         // Bei zu kurzem Tastendruck: alles verwerfen.
         if discardCurrent {
-            appState.livePreview = ""
+            resetPreview()
             await returnToIdleOrApplyPendingSwap()
             return
         }
 
-        let raw = latestFinalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = latestStable.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else {
-            appState.livePreview = ""
+            resetPreview()
             await returnToIdleOrApplyPendingSwap()
             return
         }
@@ -179,8 +160,13 @@ public final class DictationCoordinator {
         delivery.deliver(cleaned, pasteIntoFocusedField: pasteTargetFocused)
         appState.addEntry(cleaned)
 
-        appState.livePreview = ""
+        resetPreview()
         await returnToIdleOrApplyPendingSwap()
+    }
+
+    /// Setzt das Preview-Feld im AppState zurück.
+    private func resetPreview() {
+        appState.livePreview = ""
     }
 
     /// Schlusspfad jedes Diktats (egal ob verworfen, leer oder

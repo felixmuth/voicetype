@@ -28,13 +28,22 @@ final class OverlayWindowController: NSObject {
     /// SwiftUI ↔ AppKit-Oszillation (wenn der Resize selbst ein neues
     /// Layout triggert, das wieder eine minimal andere Höhe meldet).
     private var lastAppliedHeight: CGFloat = 0
+    /// User-Setting: volle Stadium-Karte (`true`) oder kompakter
+    /// Status-Kreis (`false`). Bestimmt sowohl die Panel-Geometrie
+    /// als auch die Sub-View, die SwiftUI rendert.
+    private var showLivePreview: Bool = true
 
-    /// Feste Panel-Breite. Wachstum ist ausschließlich vertikal.
-    private static let panelWidth: CGFloat = 540
-    /// Min-Höhe (1-zeiliger Vorschau-Zustand inkl. Bar/Slot/Padding).
-    /// Schlankes Atelier-Layout horizontal — daher knapper als die
-    /// alte 110-pt-Vertikal-Karte.
-    private static let minPanelHeight: CGFloat = 70
+    /// Panel-Breite — dynamisch, weil die Compact-Variante einen
+    /// quadratischen Kreis-Container hat. Beim Modus-Wechsel re-positioniert
+    /// `setShowLivePreview(...)` das Panel komplett neu.
+    private var panelWidth: CGFloat {
+        showLivePreview ? 540 : 56
+    }
+    /// Min-Höhe. Im Compact-Modus genau die Kreisgröße — kein vertikales
+    /// Wachstum, weil's keinen Text gibt, der überlaufen könnte.
+    private var minPanelHeight: CGFloat {
+        showLivePreview ? 70 : 56
+    }
 
     init(appState: AppState) {
         self.appState = appState
@@ -53,6 +62,7 @@ final class OverlayWindowController: NSObject {
         // Echte rootView mit Resize-Callback installieren.
         hostingController.rootView = OverlayContent(
             appState: appState,
+            showLivePreview: showLivePreview,
             onSizeChange: { [weak self] size in
                 self?.contentSizeChanged(size)
             })
@@ -76,6 +86,32 @@ final class OverlayWindowController: NSObject {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+
+    /// Setzt das NSPanel-Appearance basierend auf der App-Einstellung.
+    /// Das Panel gehört nicht zur SwiftUI-Scene-Hierarchie, deshalb
+    /// greift `.preferredColorScheme()` von VoiceTypeApp hier nicht —
+    /// stattdessen propagiert NSAppearance an die SwiftUI-Views,
+    /// die im NSHostingController gerendert werden (Color-Scheme wird
+    /// von NSAppearance abgeleitet).
+    func setAppearance(_ mode: AppearanceMode) {
+        panel.appearance = mode.nsAppearance
+    }
+
+    /// Schaltet zwischen Voll-Vorschau (Stadium-Karte mit Live-Text)
+    /// und Compact-Modus (56×56-Kreis) um. Aktualisiert sowohl die
+    /// SwiftUI-View als auch die Panel-Geometrie — beim nächsten
+    /// `reposition()` setzt sich dann die korrekte Größe.
+    func setShowLivePreview(_ enabled: Bool) {
+        guard enabled != showLivePreview else { return }
+        showLivePreview = enabled
+        hostingController.rootView = OverlayContent(
+            appState: appState,
+            showLivePreview: enabled,
+            onSizeChange: { [weak self] size in
+                self?.contentSizeChanged(size)
+            })
+        if isCurrentlyVisible { reposition() }
     }
 
     @objc private func handleScreenChange() {
@@ -107,13 +143,15 @@ final class OverlayWindowController: NSObject {
     private func reposition() {
         guard let screen = NSScreen.main else { return }
         let frame = screen.visibleFrame
-        let x = frame.midX - Self.panelWidth / 2
+        let width = panelWidth
+        let minHeight = minPanelHeight
+        let x = frame.midX - width / 2
         let y = frame.minY + 80
-        let initSize = NSSize(width: Self.panelWidth, height: Self.minPanelHeight)
+        let initSize = NSSize(width: width, height: minHeight)
         panel.setFrame(NSRect(origin: CGPoint(x: x, y: y), size: initSize),
                        display: true)
-        topEdgeY = y + Self.minPanelHeight
-        lastAppliedHeight = Self.minPanelHeight
+        topEdgeY = y + minHeight
+        lastAppliedHeight = minHeight
     }
 
     /// Wird vom `OverlayContent`-PreferenceKey aufgerufen, sobald die
@@ -128,7 +166,7 @@ final class OverlayWindowController: NSObject {
         // expliziten Cap. Falls SwiftUI doch mal überschießt, schadet
         // ein größerer Panel-Frame nicht (Text wäre einfach mehr als
         // 5 Zeilen, was wir per truncationMode(.head) ausschließen).
-        let newHeight = max(Self.minPanelHeight, measured)
+        let newHeight = max(minPanelHeight, measured)
         // Oszillation vermeiden — kleinere Drift (Sub-Pixel) ignorieren.
         guard abs(newHeight - lastAppliedHeight) >= 1 else { return }
         let oldFrame = panel.frame
@@ -136,7 +174,7 @@ final class OverlayWindowController: NSObject {
         let newFrame = NSRect(
             x: oldFrame.origin.x,
             y: newOriginY,
-            width: Self.panelWidth,
+            width: panelWidth,
             height: newHeight)
         lastAppliedHeight = newHeight
         NSAnimationContext.runAnimationGroup { ctx in

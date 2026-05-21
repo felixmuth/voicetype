@@ -3,6 +3,8 @@ import AppKit
 import VoiceTypeCore
 import ServiceManagement
 import VoiceTypeWhisperKit
+import VoiceTypeParakeet
+import VoiceTypeMLX
 
 // Disambiguate: SwiftUI also defines a `Settings` Scene type.
 typealias Settings = VoiceTypeCore.Settings
@@ -12,6 +14,12 @@ struct VoiceTypeApp: App {
     @State private var controller = AppController()
 
     var body: some Scene {
+        // ColorScheme aus den Settings — wird auf jede SwiftUI-Scene
+        // angewendet, sodass Light/Dark/System konsistent greift. Das
+        // Overlay (NSPanel) folgt parallel via overlayController
+        // .setAppearance(...) mit NSAppearance.
+        let scheme = controller.settings.appearance.colorScheme
+
         MenuBarExtra {
             // MenuBarExtra zeigt IMMER MenuContentView — bei fehlenden
             // Berechtigungen wechselt es intern auf den Permission-Banner-
@@ -25,6 +33,7 @@ struct VoiceTypeApp: App {
                 hotkeyName: controller.settings.pushToTalkKey,
                 cleanupHint: controller.cleanupHint,
                 permissionsMissing: !controller.permissionsGranted)
+                .preferredColorScheme(scheme)
         } label: {
             // Status-Bar-Label + unsichtbarer Auto-Opener für das
             // Permission-Window (siehe PermissionsAutoOpener-Doc).
@@ -36,6 +45,7 @@ struct VoiceTypeApp: App {
 
         Window("VoiceType", id: "main") {
             MainView(controller: controller)
+                .preferredColorScheme(scheme)
         }
         .defaultSize(width: 720, height: 480)
         .restorationBehavior(.disabled)
@@ -47,6 +57,7 @@ struct VoiceTypeApp: App {
             PermissionsView(
                 permissions: controller.permissions,
                 onRecheck: { controller.recheckPermissions() })
+                .preferredColorScheme(scheme)
         }
         .defaultSize(width: 480, height: 380)
         .windowResizability(.contentSize)
@@ -95,8 +106,8 @@ private struct PermissionsAutoOpener: View {
 final class AppController {
     let appState = AppState()
     let permissions = Permissions()
-    /// Modell-Registry mit Production-Downloadern für WhisperKit.
-    /// (MLX-Downloader ist auf Plan 5 vertagt — siehe Spec § 14.)
+    /// Modell-Registry mit Production-Downloadern für WhisperKit,
+    /// Parakeet und MLX (Gemma 3 / Qwen 2.5 für Cleanup).
     let registry: ModelRegistry
     var cleanupHint: String?
     var permissionsGranted = false
@@ -127,7 +138,11 @@ final class AppController {
         let audioCapture = AudioCapture()
         self.audioCapture = audioCapture
         let registry = ModelRegistry(
-            downloaders: [.whisperKit: WhisperKitDownloader()])
+            downloaders: [
+                .whisperKit: WhisperKitDownloader(),
+                .parakeet:   ParakeetDownloader(),
+                .mlx:        MLXDownloader(),
+            ])
         self.registry = registry
 
         // Forward-Bridge ist als Instance-Variable angelegt, damit
@@ -170,6 +185,9 @@ final class AppController {
         }
 
         self.overlayController = OverlayWindowController(appState: appState)
+        // Initiales Overlay-Appearance + Preview-Modus setzen.
+        overlayController.setAppearance(loaded.appearance)
+        overlayController.setShowLivePreview(loaded.showLivePreview)
 
         Task {
             if permissions.microphoneStatus() == .notDetermined {
@@ -260,6 +278,16 @@ final class AppController {
         if old.cleanupEngine != settings.cleanupEngine
             || old.mlxModelId != settings.mlxModelId {
             swapCleanupIfReady()
+        }
+        if old.appearance != settings.appearance {
+            // SwiftUI-Scenes reagieren automatisch (settings ist
+            // observable). Das NSPanel-Overlay muss explizit
+            // updated werden, weil es außerhalb der Scene-Hierarchie
+            // lebt.
+            overlayController.setAppearance(settings.appearance)
+        }
+        if old.showLivePreview != settings.showLivePreview {
+            overlayController.setShowLivePreview(settings.showLivePreview)
         }
     }
 

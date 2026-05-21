@@ -89,6 +89,32 @@ enum Theme {
     }
 }
 
+// MARK: - AppearanceMode → SwiftUI/AppKit
+
+extension AppearanceMode {
+    /// Mapping auf SwiftUI's `ColorScheme?`. `.system` → nil (folgt
+    /// dem macOS-Setting), `.light`/`.dark` → forciertes Schema.
+    /// Wird via `.preferredColorScheme()` auf alle Scenes angewendet.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light:  return .light
+        case .dark:   return .dark
+        }
+    }
+
+    /// Mapping auf AppKit's `NSAppearance?` — für NSPanel-basierte
+    /// Views wie das Overlay-Panel, das nicht zur SwiftUI-Scene-
+    /// Hierarchie gehört und `.preferredColorScheme()` ignoriert.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light:  return NSAppearance(named: .aqua)
+        case .dark:   return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 // MARK: - Color helpers
 
 extension Color {

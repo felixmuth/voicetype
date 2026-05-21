@@ -55,7 +55,10 @@ import Foundation
         s.transcriptionEngine = .whisperKit
         s.whisperKitModelId = "openai_whisper-large-v3-turbo"
         s.cleanupEngine = .mlx
-        s.mlxModelId = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+        // Gültige (nicht zurückgezogene) Katalog-ID — sonst klemmt der
+        // Decoder sie beim Laden auf den Default und der Roundtrip
+        // schlägt fehl.
+        s.mlxModelId = "mlx-community/Qwen2.5-3B-Instruct-4bit"
         try store.save(s)
         #expect(store.load() == s)
     }

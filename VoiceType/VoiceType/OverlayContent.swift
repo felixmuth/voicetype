@@ -16,6 +16,11 @@ import VoiceTypeCore
 /// mit, der Anfang verschwindet oben (`truncationMode(.head)`).
 struct OverlayContent: View {
     let appState: AppState
+    /// User-Setting: `true` = volle Stadium-Karte mit Live-Vorschau-Text,
+    /// `false` = kompakter Status-Kreis (~56×56 pt) ohne Text. Wird vom
+    /// `OverlayWindowController` durchgereicht und bei jedem Setting-
+    /// Wechsel via `setShowLivePreview(...)` neu gesetzt.
+    var showLivePreview: Bool = true
     /// Callback an den `OverlayWindowController`: hier kommt die
     /// natürliche Größe des outer-Cards rein. Der Controller mappt
     /// die Höhe auf das NSPanel-Frame (Top-Edge anchored).
@@ -34,17 +39,50 @@ struct OverlayContent: View {
     }
 
     var body: some View {
-        outerCard
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .preference(
-                            key: OverlayContentSizeKey.self,
-                            value: geo.size)
-                })
-            .onPreferenceChange(OverlayContentSizeKey.self) { size in
-                onSizeChange(size)
+        Group {
+            if showLivePreview {
+                outerCard
+            } else {
+                compactCircle
             }
+        }
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .preference(
+                        key: OverlayContentSizeKey.self,
+                        value: geo.size)
+            })
+        .onPreferenceChange(OverlayContentSizeKey.self) { size in
+            onSizeChange(size)
+        }
+    }
+
+    // MARK: - Compact-Modus (Kreis ohne Text)
+
+    /// Kompaktes 56×56-Kreis-Overlay. Wird gerendert, wenn der User die
+    /// Live-Vorschau in den Settings deaktiviert hat. Reiner Status-
+    /// Indikator: Wellenform bei Aufnahme, Pulse bei Verarbeitung,
+    /// Alert bei Fehler. Kein Text — wer das Diktat nicht „mitlesen"
+    /// will, gewinnt damit eine viel kleinere visuelle Präsenz.
+    private var compactCircle: some View {
+        ZStack {
+            // `.thickMaterial` statt `.thin`: bei hellen Hintergründen
+            // (Browser, Whiteboards) wird `.thinMaterial` zu durchsichtig
+            // und der Kreis wirkt als helle Nebelschicht — `.thickMaterial`
+            // bringt genug Sättigung für klare Abgrenzung in jedem Theme.
+            Circle()
+                .fill(.thickMaterial)
+            Circle()
+                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+            // Status-Inhalt: dieselben drei Symbole wie im großen
+            // Overlay, nur größer dimensioniert damit der Kreis voll
+            // wirkt.
+            statusSlot
+                .frame(width: 30, height: 26)
+        }
+        .frame(width: 56, height: 56)
+        .fixedSize()
     }
 
     private var outerCard: some View {
@@ -78,9 +116,14 @@ struct OverlayContent: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
+        // `.thickMaterial` statt `.thin`: `.thinMaterial` ist auf hellen
+        // Hintergründen (Safari/Chrome mit hellen Webseiten) so durch-
+        // lässig, dass das Overlay als milchiger Nebel wirkt und der
+        // Text kaum lesbar bleibt. `.thickMaterial` bringt deutlich mehr
+        // Blur + Sättigung — vergleichbar mit macOS-HUDs.
         .background(
             RoundedRectangle(cornerRadius: Theme.Radius.soft)
-                .fill(.thinMaterial)
+                .fill(.thickMaterial)
         )
         .overlay {
             RoundedRectangle(cornerRadius: Theme.Radius.soft)
@@ -125,14 +168,13 @@ struct OverlayContent: View {
     // MARK: - Preview-Text
 
     private var previewText: some View {
-        // PreviewPill kapselt das mehrzeilige Live-Feld:
-        // - 1–5 Zeilen: Pille wächst mit Text, Card wächst mit Panel
-        // - >5 Zeilen: Pille bleibt bei 5-Zeilen-Höhe, Inhalt scrollt
-        //   automatisch nach unten, Oberkante verblasst mit Gradient
-        //   (sanftes Fade-Out statt „…"-Abbruch)
-        let preview = appState.livePreview
-        let display = preview.isEmpty ? "\u{00A0}" : preview
-        return PreviewPill(text: display)
+        // PreviewPill kapselt das mehrzeilige Live-Feld. Sie bekommt
+        // den aktuellen committed Transkripttext aus dem AppState
+        // und gibt ihn an `AnimatedRevealText` weiter. Während
+        // Recording (auch ohne Text) zeigt sie „Zuhören…" + Cursor.
+        PreviewPill(
+            text: appState.livePreview,
+            isRecording: appState.dictationState == .recording)
     }
 
     // MARK: - Status-Label
@@ -150,8 +192,13 @@ struct OverlayContent: View {
 /// Vorschau-Pille: bis 5 Zeilen wächst sie mit, danach bleibt sie
 /// fix in der Höhe — der Inhalt scrollt sanft nach unten, die
 /// Oberkante verblasst per Gradient-Mask. Kein abruptes „…" mehr.
+///
+/// Bekommt den aktuellen committed Transkripttext aus dem `AppState`
+/// und reicht ihn an `AnimatedRevealText` weiter, der ihn linksbündig
+/// mit Schreibanimation rendert.
 private struct PreviewPill: View {
     let text: String
+    let isRecording: Bool
 
     /// Maximale Pille-Höhe (≈ 5 Zeilen Text bei 16pt + lineSpacing 2).
     private let maxHeight: CGFloat = 110
@@ -163,73 +210,75 @@ private struct PreviewPill: View {
     /// Auftauchen nicht 0pt hoch ist.
     private let minHeight: CGFloat = 24
 
-    /// Tatsächliche Texthöhe, vom GeometryReader-PreferenceKey gemeldet.
-    @State private var contentHeight: CGFloat = 24
+    /// Hartkodiert: die für `AnimatedRevealText` verfügbare Breite.
+    /// Panel 540 − OuterCard-Padding (18+18) − barIndicator (4)
+    /// − spacing (14) − statusSlot (26) − spacing (14)
+    /// − Pille-Padding (16+16) = 414 pt.
+    private let availableWidth: CGFloat = 414
+
+    /// Tatsächliche (uncapped) Texthöhe — vom GeometryReader-
+    /// PreferenceKey gemeldet. Wird nur fürs Entscheiden gebraucht,
+    /// ob die Fade-Top-Mask aktiv sein soll.
+    @State private var intrinsicHeight: CGFloat = 0
 
     var body: some View {
-        let visibleHeight = max(minHeight, min(contentHeight, maxHeight))
-        let needsFade = contentHeight > maxHeight + 0.5
+        let needsFade = intrinsicHeight > maxHeight + 0.5
 
-        return ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                Text(text)
-                    .font(Theme.ui(16))
-                    .lineSpacing(2)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        GeometryReader { g in
-                            Color.clear
-                                .preference(
-                                    key: PreviewTextHeightKey.self,
-                                    value: g.size.height)
-                        })
-                    .id("bottom")
-            }
-            .scrollBounceBehavior(.basedOnSize)
-            .scrollIndicators(.hidden)
-            .frame(height: visibleHeight)
-            .animation(.easeOut(duration: 0.25), value: visibleHeight)
-            .onPreferenceChange(PreviewTextHeightKey.self) { h in
-                contentHeight = h
-            }
-            .onChange(of: text) { _, _ in
-                // Bei jedem Live-Update sanft nach unten scrollen.
-                // Nur ab >5 Zeilen sichtbar — bei kürzerem Text ist
-                // der Scroll-Range null, der Aufruf bleibt billig.
-                withAnimation(.easeOut(duration: 0.25)) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
-                }
-            }
-        }
-        .mask {
-            // Gradient-Mask nur aktiv, wenn der Text die Pille überschritten
-            // hat — sonst würde die erste Zeile sichtbar verblassen.
-            if needsFade {
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        gradient: Gradient(colors: [.clear, .black]),
-                        startPoint: .top, endPoint: .bottom)
-                        .frame(height: fadeZone)
+        return AnimatedRevealText(
+            text: text,
+            isRecording: isRecording,
+            font: Theme.ui(16),
+            availableWidth: availableWidth)
+            // GeometryReader VOR `.frame(maxHeight:)` misst die
+            // uncapped intrinsische Höhe (= wrapped text height).
+            .background(
+                GeometryReader { g in
+                    Color.clear
+                        .preference(
+                            key: PreviewTextHeightKey.self,
+                            value: g.size.height)
+                })
+            // Cap auf ~5 Zeilen (110 pt). `bottomLeading` sorgt dafür,
+            // dass beim Überlauf der **Anfang** verschwindet und das
+            // jüngste Ende sichtbar bleibt.
+            .frame(maxWidth: .infinity, maxHeight: maxHeight,
+                   alignment: .bottomLeading)
+            // Sanfter Fade-Out an der Oberkante, wenn der Text die
+            // Pille überschreitet — sonst wäre's ein harter Cut.
+            .mask {
+                if needsFade {
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            gradient: Gradient(colors: [.clear, .black]),
+                            startPoint: .top, endPoint: .bottom)
+                            .frame(height: fadeZone)
+                        Color.black
+                    }
+                } else {
                     Color.black
                 }
-            } else {
-                Color.black
             }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.primary.opacity(0.07))
-        )
-        .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.primary.opacity(0.07))
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            .onPreferenceChange(PreviewTextHeightKey.self) { h in
+                intrinsicHeight = h
+            }
     }
 }
 
 private struct PreviewTextHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct PreviewTextWidthKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
