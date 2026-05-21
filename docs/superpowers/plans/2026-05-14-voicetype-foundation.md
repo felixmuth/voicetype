@@ -120,7 +120,7 @@ In Xcode: `File → New → Project → macOS → App`.
 - Product Name: `VoiceType`
 - Organization Identifier: `com.felixmuth`
 - Interface: SwiftUI, Language: Swift
-- Speicherort: Repo-Wurzel `/Users/felixmuth/Projekte/Coding/voicetype` (sodass `VoiceType.xcodeproj` neben `VoiceTypeCore/` liegt). Häkchen „Create Git repository" **deaktivieren** (Repo existiert schon).
+- Speicherort: Repo-Wurzel `<repo>` (sodass `VoiceType.xcodeproj` neben `VoiceTypeCore/` liegt). Häkchen „Create Git repository" **deaktivieren** (Repo existiert schon).
 
 Dann das lokale Paket einbinden: `File → Add Package Dependencies → Add Local…` → Ordner `VoiceTypeCore` wählen → zum Target `VoiceType` hinzufügen.
 

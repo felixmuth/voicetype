@@ -502,7 +502,7 @@ Expected: PASS — alle 33 Tests grün (28 bisherige + 5 neue Bar-Tests).
 
 - [ ] **Step 7: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`. (Der View wird noch nirgends instanziiert — Task 4 wird ihn ins MenuBarExtra-Label setzen.)
 
 - [ ] **Step 8: Commit**
@@ -545,7 +545,7 @@ Ersetze durch:
 
 - [ ] **Step 2: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Paket-Tests laufen lassen (Regression)**
@@ -731,7 +731,7 @@ Dann in `init()`, **direkt vor** dem `Task { ... }`-Block am Ende von `init`, di
 
 - [ ] **Step 4: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 5: Paket-Tests laufen lassen (Regression)**
@@ -885,7 +885,7 @@ In `VoiceType/VoiceType/VoiceTypeApp.swift`, in `VoiceTypeApp.body`, **nach** de
 
 - [ ] **Step 4: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`. Das Fenster kann momentan über `⌘N` (oder die Window-Menü-Einträge) oder über `openWindow(id: "main")` aus anderem Code geöffnet werden — die Popover-Anbindung folgt in Task 8.
 
 - [ ] **Step 5: Paket-Tests laufen lassen (Regression)**
@@ -1114,7 +1114,7 @@ durch:
 
 - [ ] **Step 5: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`.
 
 Falls Compiler-Fehler zu `@Bindable` auf einem `@Observable`-Typ: korrekt — `AppController` ist bereits `@Observable`, `@Bindable var controller: AppController` braucht keinen zusätzlichen Property-Wrapper.
@@ -1211,7 +1211,7 @@ struct MenuContentView: View {
 
 - [ ] **Step 2: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Paket-Tests laufen lassen (Regression)**
@@ -1283,7 +1283,7 @@ Lösche diese Computed-Property komplett. Sie wurde in Task 4 durch das `Wavefor
 
 - [ ] **Step 3: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`. Bei Compiler-Fehler „Cannot find 'menuBarSymbol'": das ist genau das, was Step 2 entfernen sollte — referenziert wird sie nirgends mehr, daher sollte der Build sauber durchgehen.
 
 - [ ] **Step 4: Paket-Tests laufen lassen (Regression)**
@@ -1303,7 +1303,7 @@ git commit -m "feat: wire mic-level callback in AppController, remove obsolete m
 (Vom Subagent NICHT auszuführen — braucht eine GUI-Sitzung.)
 
 1. In Xcode den Plan-3-Worktree öffnen
-   (`/Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj`), ⌘R.
+   (`<repo>/.worktrees/plan-3-ui-polish/VoiceType/VoiceType.xcodeproj`), ⌘R.
 2. **Menüleisten-Icon:**
    - Beim Start (`.loading`): 3 graue statische Balken.
    - Nach Berechtigungs-Freischaltung (`.idle`): immer noch 3 graue statische Balken.

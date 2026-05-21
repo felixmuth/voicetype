@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: VoiceTypeCore tests
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Run VoiceTypeCore test suite
+        working-directory: VoiceTypeCore
+        # --no-parallel: the swift-testing parallel runner deadlocks on this
+        # package (the test bundle sits at 0% CPU indefinitely). Serial runs
+        # finish in well under a second.
+        run: swift test --no-parallel

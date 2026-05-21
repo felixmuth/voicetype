@@ -372,7 +372,7 @@ Hinweis: `cleanupHint` hat Default `nil`, damit der bestehende Aufruf in `VoiceT
 
 - [ ] **Step 2: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-2-cleanup/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-2-cleanup/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Paket-Tests laufen lassen (Regression)**
@@ -511,7 +511,7 @@ final class AppController {
 
 - [ ] **Step 2: App bauen**
 
-Run: `xcodebuild -project /Users/felixmuth/Projekte/Coding/voicetype/.worktrees/plan-2-cleanup/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
+Run: `xcodebuild -project <repo>/.worktrees/plan-2-cleanup/VoiceType/VoiceType.xcodeproj -scheme VoiceType -configuration Debug build`
 Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 3: Paket-Tests laufen lassen (Regression)**
