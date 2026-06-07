@@ -13,7 +13,7 @@ Everything runs on-device: no cloud, no account, no cost.
 
 ## Demo
 
-https://github.com/user-attachments/assets/4f146bee-44ba-413f-812a-28447f277eae
+https://github.com/user-attachments/assets/5330b631-3fec-4163-bbd4-629579dfea76
 
 ## Features
 
